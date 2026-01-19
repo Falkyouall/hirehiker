@@ -55,7 +55,9 @@ export const sendMessage = createServerFn({ method: "POST" })
       problem
         ? {
             description: problem.description,
-            codebaseContext: problem.codebaseContext,
+            bugTickets: problem.bugTickets,
+            projectFiles: problem.projectFiles,
+            swaggerSpec: problem.swaggerSpec,
           }
         : undefined
     )

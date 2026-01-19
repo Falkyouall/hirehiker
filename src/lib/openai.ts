@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import type { ProjectFile, SwaggerSpec, BugTicket } from "@/db/schema"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -9,34 +10,15 @@ export interface ChatMessage {
   content: string
 }
 
-const SYSTEM_PROMPT = `You are a senior developer colleague helping a teammate investigate and solve a technical issue.
+const SYSTEM_PROMPT = `You are a helpful AI assistant.
 
-## Your Role
-You are experienced, knowledgeable, and genuinely helpful. You want your colleague to succeed and learn.
-
-## How to Help
-- Answer questions directly and thoroughly with code examples when appropriate
-- Provide solutions when asked - don't be evasive
-- Share expertise - explain the "why", mention best practices, suggest improvements
-- Be collaborative - build on their ideas, offer alternatives, discuss trade-offs
-
-## What NOT to do
-- Don't withhold information or make them guess
-- Don't refuse to show code or solutions
-
-## Context
-The candidate is working on a realistic workplace scenario with vague requirements and codebase context. They need to investigate, understand what's needed, and propose a solution.
-
-## Important
-The candidate is evaluated on the QUALITY of their questions - not whether they reach the answer. Good questions demonstrate:
-- Understanding the problem space before diving into solutions
-- Breaking down complex issues systematically
-- Asking about context, requirements, and constraints
-- Seeking to understand root causes, not just symptoms`
+The user is working on debugging a software project. Below is the context of the project they are working on.`
 
 export interface ProblemContext {
   description: string
-  codebaseContext?: string | null
+  bugTickets?: BugTicket[] | null
+  projectFiles?: ProjectFile[] | null
+  swaggerSpec?: SwaggerSpec | null
 }
 
 export async function chat(
@@ -46,9 +28,55 @@ export async function chat(
   let systemContent = SYSTEM_PROMPT
 
   if (problemContext) {
-    systemContent += `\n\n## Current Problem\n${problemContext.description}`
-    if (problemContext.codebaseContext) {
-      systemContent += `\n\n## Codebase Context\n${problemContext.codebaseContext}`
+    systemContent += `\n\n## Problem Description\n${problemContext.description}`
+
+    if (problemContext.bugTickets && problemContext.bugTickets.length > 0) {
+      systemContent += `\n\n## Bug Reports`
+      for (const ticket of problemContext.bugTickets) {
+        systemContent += `\n\n### ${ticket.id}: ${ticket.title}\n${ticket.description}`
+      }
+    }
+
+    if (problemContext.projectFiles && problemContext.projectFiles.length > 0) {
+      systemContent += `\n\n## Project Code`
+      for (const file of problemContext.projectFiles) {
+        systemContent += `\n\n### ${file.path}\n\`\`\`${file.language}\n${file.content}\n\`\`\``
+      }
+    }
+
+    if (problemContext.swaggerSpec) {
+      systemContent += `\n\n## API Documentation`
+      systemContent += `\n\n**${problemContext.swaggerSpec.title}** (v${problemContext.swaggerSpec.version})`
+      systemContent += `\nBase URL: ${problemContext.swaggerSpec.baseUrl}`
+
+      for (const endpoint of problemContext.swaggerSpec.endpoints) {
+        systemContent += `\n\n### ${endpoint.method} ${endpoint.path}`
+        systemContent += `\n${endpoint.summary}`
+        if (endpoint.description) {
+          systemContent += `\n${endpoint.description}`
+        }
+        if (endpoint.parameters && endpoint.parameters.length > 0) {
+          systemContent += `\n\n**Parameters:**`
+          for (const param of endpoint.parameters) {
+            const required = param.required ? " (required)" : ""
+            systemContent += `\n- \`${param.name}\` (${param.in}): ${param.type}${required}`
+            if (param.description) {
+              systemContent += ` - ${param.description}`
+            }
+          }
+        }
+        if (endpoint.responseSchema) {
+          systemContent += `\n\n**Response:** ${endpoint.responseSchema.type}`
+          if (endpoint.responseSchema.properties) {
+            for (const [key, value] of Object.entries(endpoint.responseSchema.properties)) {
+              systemContent += `\n- \`${key}\`: ${value.type}`
+              if (value.description) {
+                systemContent += ` - ${value.description}`
+              }
+            }
+          }
+        }
+      }
     }
   }
 

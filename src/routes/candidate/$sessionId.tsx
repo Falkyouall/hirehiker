@@ -4,10 +4,14 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Send, CheckCircle, Loader2 } from 'lucide-react'
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
+import { ProjectCodeViewer } from '@/components/project-code-viewer'
+import { SwaggerViewer } from '@/components/swagger-viewer'
+import { Send, CheckCircle, Loader2, Bug, Code2, FileJson, FileText } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { getSession, startSession, completeSession } from '@/server/functions/sessions'
 import { getMessages, sendMessage } from '@/server/functions/messages'
+import type { ProjectFile, SwaggerSpec, BugTicket } from '@/db/schema'
 
 export const Route = createFileRoute('/candidate/$sessionId')({
   component: CandidateSessionPage,
@@ -45,6 +49,29 @@ interface Message {
   createdAt: Date
 }
 
+function BugTicketCollapsible({ ticket }: { ticket: BugTicket }) {
+  return (
+    <Collapsible className="border-red-200 bg-red-50/30">
+      <CollapsibleTrigger>
+        <Bug className="w-4 h-4 text-red-500" />
+        <span className="font-mono text-sm text-zinc-500">{ticket.id}</span>
+        <span className="text-zinc-700">{ticket.title}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-zinc-700">{ticket.description}</p>
+          {ticket.relatedFiles && ticket.relatedFiles.length > 0 && (
+            <div className="text-xs text-zinc-500">
+              <span className="font-medium">Relevante Dateien:</span>{' '}
+              {ticket.relatedFiles.join(', ')}
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 function CandidateSessionPage() {
   const { session: initialSession, messages: initialMessages } = Route.useLoaderData()
   const navigate = useNavigate()
@@ -52,7 +79,15 @@ function CandidateSessionPage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [codeViewerOpen, setCodeViewerOpen] = useState(false)
+  const [swaggerOpen, setSwaggerOpen] = useState(false)
+  const [instructionsOpen, setInstructionsOpen] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Get problem data
+  const bugTickets = (session.problem?.bugTickets as BugTicket[]) || []
+  const projectFiles = (session.problem?.projectFiles as ProjectFile[]) || []
+  const swaggerSpec = session.problem?.swaggerSpec as SwaggerSpec | undefined
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -121,7 +156,7 @@ function CandidateSessionPage() {
 
   const handleCompleteTask = async () => {
     const confirmed = window.confirm(
-      'Are you sure you want to complete this task? You will not be able to send any more messages.'
+      'Bist du sicher, dass du die Aufgabe abschließen möchtest? Du kannst danach keine weiteren Nachrichten mehr senden.'
     )
     if (!confirmed) return
 
@@ -144,11 +179,11 @@ function CandidateSessionPage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
-            <CardTitle>Session Completed</CardTitle>
+            <CardTitle>Session abgeschlossen</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-zinc-600">
-              This session has already been completed. Thank you for your participation!
+              Diese Session wurde bereits abgeschlossen. Vielen Dank für deine Teilnahme!
             </p>
           </CardContent>
         </Card>
@@ -156,11 +191,8 @@ function CandidateSessionPage() {
     )
   }
 
-  const difficultyColors = {
-    easy: 'success',
-    medium: 'warning',
-    hard: 'destructive',
-  } as const
+  // Check if we have the new bug ticket format
+  const hasBugTickets = bugTickets.length > 0
 
   return (
     <div className="h-screen flex flex-col">
@@ -172,50 +204,105 @@ function CandidateSessionPage() {
               {session.problem?.title || 'Loading...'}
             </h1>
             <p className="text-sm text-zinc-500">
-              Welcome, {session.candidateName}
+              Willkommen, {session.candidateName}
             </p>
           </div>
           <div className="flex items-center gap-4">
             {session.problem?.difficulty && (
-              <Badge variant={difficultyColors[session.problem.difficulty]}>
+              <Badge variant={session.problem.difficulty === 'easy' ? 'success' : session.problem.difficulty === 'hard' ? 'destructive' : 'warning'}>
                 {session.problem.difficulty}
               </Badge>
             )}
-            <Button onClick={handleCompleteTask} disabled={isLoading}>Complete Task</Button>
+            <Button onClick={handleCompleteTask} disabled={isLoading}>Abschließen</Button>
           </div>
         </div>
       </header>
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Problem panel */}
-        <div className="w-1/2 border-r border-zinc-200 overflow-auto p-6 bg-white">
-          <h2 className="text-lg font-semibold mb-4">Problem Description</h2>
-          <div className="prose prose-zinc max-w-none">
-            <ReactMarkdown>{session.problem?.description || ''}</ReactMarkdown>
-          </div>
+        {/* Left panel - Bug tickets & Code */}
+        <div className="w-1/2 border-r border-zinc-200 overflow-y-auto bg-white">
+          {hasBugTickets ? (
+            <div className="space-y-0">
+              {/* Collapsible Aufgabenstellung */}
+              <Collapsible open={instructionsOpen} onOpenChange={setInstructionsOpen}>
+                <CollapsibleTrigger>
+                  <FileText className="w-4 h-4" />
+                  Aufgabenstellung
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="p-4 prose prose-sm prose-zinc max-w-none">
+                    <ReactMarkdown>{session.problem?.description || ''}</ReactMarkdown>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
-          {session.problem?.codebaseContext && (
-            <details className="mt-6 border-t pt-4">
-              <summary className="text-lg font-semibold cursor-pointer hover:text-zinc-700">
-                Codebase Context
-              </summary>
-              <div className="mt-4 prose prose-zinc max-w-none">
-                <ReactMarkdown>{session.problem.codebaseContext}</ReactMarkdown>
+              {/* Bug Tickets - each one expandable */}
+              {bugTickets.map((ticket) => (
+                <BugTicketCollapsible key={ticket.id} ticket={ticket} />
+              ))}
+
+              {/* Collapsible Projekt-Code */}
+              {projectFiles.length > 0 && (
+                <Collapsible open={codeViewerOpen} onOpenChange={setCodeViewerOpen}>
+                  <CollapsibleTrigger>
+                    <Code2 className="w-4 h-4" />
+                    Projekt-Code ({projectFiles.length} Dateien)
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="h-[350px]">
+                      <ProjectCodeViewer files={projectFiles} />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* Collapsible API Dokumentation */}
+              {swaggerSpec && (
+                <Collapsible open={swaggerOpen} onOpenChange={setSwaggerOpen}>
+                  <CollapsibleTrigger>
+                    <FileJson className="w-4 h-4" />
+                    API Dokumentation ({swaggerSpec.endpoints.length} Endpoints)
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="max-h-[400px] overflow-auto">
+                      <SwaggerViewer spec={swaggerSpec} />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
+          ) : (
+            // Fallback to old layout for problems without bug tickets
+            <div className="p-6 overflow-auto">
+              <h2 className="text-lg font-semibold mb-4">Problem Description</h2>
+              <div className="prose prose-zinc max-w-none">
+                <ReactMarkdown>{session.problem?.description || ''}</ReactMarkdown>
               </div>
-            </details>
+
+              {session.problem?.codebaseContext && (
+                <details className="mt-6 border-t pt-4">
+                  <summary className="text-lg font-semibold cursor-pointer hover:text-zinc-700">
+                    Codebase Context
+                  </summary>
+                  <div className="mt-4 prose prose-zinc max-w-none">
+                    <ReactMarkdown>{session.problem.codebaseContext}</ReactMarkdown>
+                  </div>
+                </details>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Chat panel */}
+        {/* Right panel - Chat */}
         <div className="w-1/2 flex flex-col bg-zinc-50">
           {/* Messages */}
           <div className="flex-1 overflow-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-center text-zinc-500 mt-8">
-                <p className="mb-2">Ask questions to solve the problem.</p>
+                <p className="mb-2">Stelle Fragen, um die Bugs zu untersuchen.</p>
                 <p className="text-sm">
-                  Remember: Focus on asking precise, thoughtful questions that demonstrate your understanding.
+                  Denke daran: Es geht um die Qualität deiner Fragen, nicht um eine perfekte Lösung.
                 </p>
               </div>
             )}
@@ -251,7 +338,7 @@ function CandidateSessionPage() {
           <div className="p-4 border-t border-zinc-200 bg-white">
             <div className="flex gap-2">
               <Textarea
-                placeholder="Ask a question..."
+                placeholder="Stelle eine Frage..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -271,7 +358,6 @@ function CandidateSessionPage() {
           </div>
         </div>
       </div>
-
     </div>
   )
 }

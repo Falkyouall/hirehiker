@@ -6,6 +6,45 @@ export const difficultyEnum = pgEnum("difficulty", ["easy", "medium", "hard"])
 export const sessionStatusEnum = pgEnum("session_status", ["pending", "active", "completed"])
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"])
 
+// Type definitions for project files and swagger
+export interface ProjectFile {
+  path: string        // e.g., "src/hooks/useUserStats.ts"
+  language: string    // "typescript" | "css" | "json"
+  content: string     // Full file content
+}
+
+export interface SwaggerEndpoint {
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+  path: string
+  summary: string
+  description?: string
+  parameters?: {
+    name: string
+    in: "path" | "query" | "body"
+    type: string
+    required?: boolean
+    description?: string
+  }[]
+  responseSchema?: {
+    type: string
+    properties?: Record<string, { type: string; description?: string }>
+  }
+}
+
+export interface SwaggerSpec {
+  title: string
+  version: string
+  baseUrl: string
+  endpoints: SwaggerEndpoint[]
+}
+
+export interface BugTicket {
+  id: string          // e.g., "#201"
+  title: string       // Short title
+  description: string // Full bug report
+  relatedFiles?: string[]  // Hint about which files might be relevant
+}
+
 // Problems table
 export const problems = pgTable("problems", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -14,6 +53,9 @@ export const problems = pgTable("problems", {
   codebaseContext: text("codebase_context"),
   difficulty: difficultyEnum("difficulty").notNull().default("medium"),
   category: text("category").notNull().default("javascript-basics"),
+  projectFiles: jsonb("project_files").$type<ProjectFile[]>(),
+  swaggerSpec: jsonb("swagger_spec").$type<SwaggerSpec>(),
+  bugTickets: jsonb("bug_tickets").$type<BugTicket[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 

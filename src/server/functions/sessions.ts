@@ -44,6 +44,9 @@ export const getSession = createServerFn({ method: "GET" })
           codebaseContext: problems.codebaseContext,
           difficulty: problems.difficulty,
           category: problems.category,
+          projectFiles: problems.projectFiles,
+          swaggerSpec: problems.swaggerSpec,
+          bugTickets: problems.bugTickets,
         },
       })
       .from(sessions)
@@ -120,6 +123,9 @@ export const getSessionWithMessages = createServerFn({ method: "GET" })
           codebaseContext: problems.codebaseContext,
           difficulty: problems.difficulty,
           category: problems.category,
+          projectFiles: problems.projectFiles,
+          swaggerSpec: problems.swaggerSpec,
+          bugTickets: problems.bugTickets,
         },
       })
       .from(sessions)
