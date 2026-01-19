@@ -53,7 +53,8 @@ export const problems = pgTable("problems", {
   codebaseContext: text("codebase_context"),
   difficulty: difficultyEnum("difficulty").notNull().default("medium"),
   category: text("category").notNull().default("javascript-basics"),
-  projectFiles: jsonb("project_files").$type<ProjectFile[]>(),
+  githubRepoUrl: text("github_repo_url"), // GitHub repo URL for WebContainer cloning
+  projectFiles: jsonb("project_files").$type<ProjectFile[]>(), // Fallback if no GitHub URL
   swaggerSpec: jsonb("swagger_spec").$type<SwaggerSpec>(),
   bugTickets: jsonb("bug_tickets").$type<BugTicket[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -357,6 +357,9 @@ const bugTickets: BugTicket[] = [
 
 const userDashboardProblem = {
   title: "User Dashboard Bugs",
+  // GitHub repo URL - when provided, the WebContainer will clone from here
+  // githubRepoUrl: "https://github.com/hirehiker/problem-user-dashboard",
+  // For now, we use inline projectFiles as a fallback
   description: `## Aufgabenstellung
 
 Du bist Entwickler bei einem Startup und hast die Aufgabe, mehrere Bug-Reports aus dem Issue-Tracker zu untersuchen.

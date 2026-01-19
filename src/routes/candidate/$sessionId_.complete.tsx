@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle } from 'lucide-react'
 
-export const Route = createFileRoute('/candidate/$sessionId/complete')({
+export const Route = createFileRoute('/candidate/$sessionId_/complete')({
   component: SessionCompletePage,
 })
 

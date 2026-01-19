@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Plus, ArrowLeft, Eye, Copy, Check, ChevronDown, ChevronRight, Trash2, RotateCcw } from 'lucide-react'
+import { Plus, ArrowLeft, Eye, Copy, Check, ChevronDown, ChevronRight, Trash2, RotateCcw, Github, Calendar, Clock } from 'lucide-react'
 import { getSessions, createSession, deleteSession } from '@/server/functions/sessions'
 import { getProblems } from '@/server/functions/problems'
 import { DEFAULT_EVALUATION_SETTINGS, type EvaluationSettings, type EvaluationDimension } from '@/lib/evaluation-config'
@@ -31,6 +31,7 @@ function DashboardPage() {
   })
   const [isCreating, setIsCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
   const [showEvalSettings, setShowEvalSettings] = useState(false)
   const [evalSettings, setEvalSettings] = useState<EvaluationSettings>(
     JSON.parse(JSON.stringify(DEFAULT_EVALUATION_SETTINGS))
@@ -58,6 +59,8 @@ function DashboardPage() {
               id: problem.id,
               title: problem.title,
               difficulty: problem.difficulty,
+              category: problem.category,
+              githubRepoUrl: problem.githubRepoUrl,
             } : null,
           },
           ...sessions,
@@ -136,6 +139,29 @@ function DashboardPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  const toggleSessionExpanded = (id: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return '-'
+    return new Date(date).toLocaleString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
   const handleDeleteSession = async (id: string, candidateName: string) => {
     const confirmed = window.confirm(
       `Are you sure you want to delete the session for "${candidateName}"? This will permanently delete all messages and analysis data.`
@@ -202,65 +228,147 @@ function DashboardPage() {
               </CardContent>
             </Card>
           ) : (
-            sessions.map((session) => (
-              <Card key={session.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-zinc-900">
-                          {session.candidateName}
-                        </h3>
-                        <Badge variant={statusColors[session.status]}>
-                          {session.status}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-zinc-500 mb-2">
-                        {session.candidateEmail}
-                      </p>
-                      {session.problem && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-zinc-600">
-                            Problem: {session.problem.title}
-                          </span>
-                          <Badge variant={difficultyColors[session.problem.difficulty]} className="text-xs">
-                            {session.problem.difficulty}
-                          </Badge>
+            sessions.map((session) => {
+              const isExpanded = expandedSessions.has(session.id)
+              return (
+                <Card key={session.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-0">
+                    {/* Main row - always visible */}
+                    <div className="flex items-center justify-between p-6">
+                      <div className="flex items-center gap-3 flex-1">
+                        <button
+                          onClick={() => toggleSessionExpanded(session.id)}
+                          className="p-1 hover:bg-zinc-100 rounded"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4 text-zinc-500" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-zinc-500" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <h3 className="font-semibold text-zinc-900">
+                              {session.candidateName}
+                            </h3>
+                            <Badge variant={statusColors[session.status]}>
+                              {session.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-zinc-500">
+                            {session.candidateEmail}
+                          </p>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copySessionId(session.id)}
-                      >
-                        {copiedId === session.id ? (
-                          <Check className="w-4 h-4 mr-1" />
-                        ) : (
-                          <Copy className="w-4 h-4 mr-1" />
-                        )}
-                        {copiedId === session.id ? 'Copied!' : 'Copy ID'}
-                      </Button>
-                      <Link to="/dashboard/sessions/$sessionId" params={{ sessionId: session.id }}>
-                        <Button size="sm">
-                          <Eye className="w-4 h-4 mr-1" />
-                          Review
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copySessionId(session.id)}
+                        >
+                          {copiedId === session.id ? (
+                            <Check className="w-4 h-4 mr-1" />
+                          ) : (
+                            <Copy className="w-4 h-4 mr-1" />
+                          )}
+                          {copiedId === session.id ? 'Copied!' : 'Copy ID'}
                         </Button>
-                      </Link>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteSession(session.id, session.candidateName)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                        <Link to="/dashboard/sessions/$sessionId" params={{ sessionId: session.id }}>
+                          <Button size="sm">
+                            <Eye className="w-4 h-4 mr-1" />
+                            Review
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteSession(session.id, session.candidateName)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="px-6 pb-6 pt-0 border-t border-zinc-100">
+                        <div className="grid grid-cols-2 gap-6 mt-4">
+                          {/* Problem Info */}
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-zinc-700">Problem</h4>
+                            {session.problem ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-zinc-900">{session.problem.title}</span>
+                                  <Badge variant={difficultyColors[session.problem.difficulty]} className="text-xs">
+                                    {session.problem.difficulty}
+                                  </Badge>
+                                </div>
+                                {session.problem.category && (
+                                  <div className="text-sm text-zinc-500">
+                                    Category: {session.problem.category}
+                                  </div>
+                                )}
+                                {session.problem.githubRepoUrl && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Github className="w-4 h-4 text-zinc-400" />
+                                    <a
+                                      href={session.problem.githubRepoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:underline truncate max-w-[300px]"
+                                    >
+                                      {session.problem.githubRepoUrl}
+                                    </a>
+                                  </div>
+                                )}
+                                {!session.problem.githubRepoUrl && (
+                                  <div className="text-sm text-zinc-400 italic">
+                                    No GitHub repository configured (using inline files)
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-zinc-400">No problem assigned</span>
+                            )}
+                          </div>
+
+                          {/* Timeline Info */}
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-zinc-700">Timeline</h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center gap-2 text-zinc-600">
+                                <Calendar className="w-4 h-4 text-zinc-400" />
+                                <span>Created: {formatDate(session.createdAt)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-zinc-600">
+                                <Clock className="w-4 h-4 text-zinc-400" />
+                                <span>Started: {formatDate(session.startedAt)}</span>
+                              </div>
+                              {session.completedAt && (
+                                <div className="flex items-center gap-2 text-zinc-600">
+                                  <Check className="w-4 h-4 text-green-500" />
+                                  <span>Completed: {formatDate(session.completedAt)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Session ID */}
+                        <div className="mt-4 pt-4 border-t border-zinc-100">
+                          <div className="flex items-center gap-2 text-xs text-zinc-400">
+                            <span>Session ID:</span>
+                            <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono">{session.id}</code>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })
           )}
         </div>
       </main>

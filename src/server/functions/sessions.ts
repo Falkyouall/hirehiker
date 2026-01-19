@@ -17,6 +17,8 @@ export const getSessions = createServerFn({ method: "GET" }).handler(async () =>
         id: problems.id,
         title: problems.title,
         difficulty: problems.difficulty,
+        category: problems.category,
+        githubRepoUrl: problems.githubRepoUrl,
       },
     })
     .from(sessions)
@@ -47,6 +49,7 @@ export const getSession = createServerFn({ method: "GET" })
           projectFiles: problems.projectFiles,
           swaggerSpec: problems.swaggerSpec,
           bugTickets: problems.bugTickets,
+          githubRepoUrl: problems.githubRepoUrl,
         },
       })
       .from(sessions)
@@ -126,6 +129,7 @@ export const getSessionWithMessages = createServerFn({ method: "GET" })
           projectFiles: problems.projectFiles,
           swaggerSpec: problems.swaggerSpec,
           bugTickets: problems.bugTickets,
+          githubRepoUrl: problems.githubRepoUrl,
         },
       })
       .from(sessions)

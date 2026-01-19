@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start"
 import { db } from "@/lib/db"
 import { messages, sessions, problems } from "@/db/schema"
 import { eq } from "drizzle-orm"
-import { chat } from "@/lib/openai"
+import { chat, chatWithFiles } from "@/lib/openai"
 
 export const getMessages = createServerFn({ method: "GET" })
   .inputValidator((data: { sessionId: string }) => data)
@@ -15,7 +15,14 @@ export const getMessages = createServerFn({ method: "GET" })
   })
 
 export const sendMessage = createServerFn({ method: "POST" })
-  .inputValidator((data: { sessionId: string; content: string }) => data)
+  .inputValidator(
+    (data: {
+      sessionId: string
+      content: string
+      projectFiles?: Record<string, string> // Files from WebContainer
+      fileTree?: string[] // File paths for context
+    }) => data
+  )
   .handler(async ({ data }) => {
     // Save user message
     const userMessage = await db
@@ -50,17 +57,36 @@ export const sendMessage = createServerFn({ method: "POST" })
       content: m.content,
     }))
 
-    const aiResponse = await chat(
-      chatMessages,
-      problem
-        ? {
-            description: problem.description,
-            bugTickets: problem.bugTickets,
-            projectFiles: problem.projectFiles,
-            swaggerSpec: problem.swaggerSpec,
-          }
-        : undefined
-    )
+    let aiResponse: string
+
+    // If projectFiles and fileTree are provided, use the new chat function with function calling
+    if (data.projectFiles && data.fileTree && data.fileTree.length > 0) {
+      // readFile callback - reads from the provided projectFiles
+      const readFile = async (path: string): Promise<string | null> => {
+        return data.projectFiles?.[path] || null
+      }
+
+      aiResponse = await chat(
+        chatMessages,
+        {
+          description: problem?.description || "",
+          fileTree: data.fileTree,
+          bugTickets: problem?.bugTickets,
+          swaggerSpec: problem?.swaggerSpec,
+        },
+        readFile
+      )
+    } else {
+      // Fallback to legacy chat function with embedded files
+      aiResponse = await chatWithFiles(chatMessages, problem ? {
+        description: problem.description,
+        bugTickets: problem.bugTickets,
+        projectFiles: problem.projectFiles,
+        swaggerSpec: problem.swaggerSpec,
+      } : {
+        description: "",
+      })
+    }
 
     // Save AI response
     const assistantMessage = await db

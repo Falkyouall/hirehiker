@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Plus, BookOpen } from 'lucide-react'
+import { ArrowLeft, Plus, BookOpen, Trash2, Github } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { getProblems, createProblem } from '@/server/functions/problems'
+import { getProblems, createProblem, deleteProblem } from '@/server/functions/problems'
 import type { Problem } from '@/db/schema'
 
 export const Route = createFileRoute('/dashboard/problems/')({
@@ -28,6 +28,7 @@ function ProblemsPage() {
     description: '',
     difficulty: 'medium' as 'easy' | 'medium' | 'hard',
     category: 'javascript-basics',
+    githubRepoUrl: '',
   })
   const [isCreating, setIsCreating] = useState(false)
 
@@ -47,12 +48,30 @@ function ProblemsPage() {
           description: '',
           difficulty: 'medium',
           category: 'javascript-basics',
+          githubRepoUrl: '',
         })
       }
     } catch (error) {
       console.error('Failed to create problem:', error)
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleDeleteProblem = async (id: string, title: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${title}"? This will also delete ALL sessions and their data that use this problem. This action cannot be undone.`
+    )
+    if (!confirmed) return
+
+    try {
+      await deleteProblem({ data: { id } })
+      setProblems(problems.filter(p => p.id !== id))
+      if (showPreview?.id === id) {
+        setShowPreview(null)
+      }
+    } catch (error) {
+      console.error('Failed to delete problem:', error)
     }
   }
 
@@ -101,12 +120,14 @@ function ProblemsPage() {
             problems.map((problem) => (
               <Card
                 key={problem.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => setShowPreview(problem)}
+                className="hover:shadow-md transition-shadow"
               >
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => setShowPreview(problem)}
+                    >
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-zinc-900">{problem.title}</h3>
                         <Badge variant={difficultyColors[problem.difficulty]}>
@@ -114,10 +135,27 @@ function ProblemsPage() {
                         </Badge>
                         <Badge variant="outline">{problem.category}</Badge>
                       </div>
-                      <p className="text-sm text-zinc-500 line-clamp-2">
+                      <p className="text-sm text-zinc-500 line-clamp-2 mb-2">
                         {problem.description.slice(0, 150)}...
                       </p>
+                      {problem.githubRepoUrl && (
+                        <div className="flex items-center gap-2 text-xs text-zinc-400">
+                          <Github className="w-3 h-3" />
+                          <span className="truncate max-w-[300px]">{problem.githubRepoUrl}</span>
+                        </div>
+                      )}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteProblem(problem.id, problem.title)
+                      }}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 ml-4"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -186,6 +224,22 @@ function ProblemsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  GitHub Repository URL (optional)
+                </label>
+                <Input
+                  placeholder="e.g., https://github.com/company/problem-repo"
+                  value={newProblem.githubRepoUrl}
+                  onChange={(e) =>
+                    setNewProblem({ ...newProblem, githubRepoUrl: e.target.value })
+                  }
+                />
+                <p className="text-xs text-zinc-500 mt-1">
+                  The WebContainer will clone this repo for the candidate to edit. Leave empty to use inline project files.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
                   Description (Markdown)
                 </label>
                 <Textarea
@@ -234,6 +288,19 @@ function ProblemsPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {showPreview.githubRepoUrl && (
+                <div className="mb-4 p-3 bg-zinc-50 rounded-lg border border-zinc-200">
+                  <span className="text-sm font-medium text-zinc-700">GitHub Repository: </span>
+                  <a
+                    href={showPreview.githubRepoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    {showPreview.githubRepoUrl}
+                  </a>
+                </div>
+              )}
               <div className="prose prose-zinc max-w-none">
                 <ReactMarkdown>{showPreview.description}</ReactMarkdown>
               </div>

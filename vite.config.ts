@@ -13,9 +13,24 @@ const config = defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
+  },
   plugins: [
     devtools(),
-    nitro(),
+    nitro({
+      routeRules: {
+        '/**': {
+          headers: {
+            'Cross-Origin-Embedder-Policy': 'require-corp',
+            'Cross-Origin-Opener-Policy': 'same-origin',
+          },
+        },
+      },
+    }),
     tailwindcss(),
     // this is the plugin that enables path aliases
     viteTsConfigPaths({

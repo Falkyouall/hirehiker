@@ -15,7 +15,7 @@ import { Route as CandidateIndexRouteImport } from './routes/candidate/index'
 import { Route as CandidateSessionIdRouteImport } from './routes/candidate/$sessionId'
 import { Route as DashboardProblemsIndexRouteImport } from './routes/dashboard/problems.index'
 import { Route as DashboardSessionsSessionIdRouteImport } from './routes/dashboard/sessions.$sessionId'
-import { Route as CandidateSessionIdCompleteRouteImport } from './routes/candidate/$sessionId.complete'
+import { Route as CandidateSessionIdCompleteRouteImport } from './routes/candidate/$sessionId_.complete'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -50,14 +50,14 @@ const DashboardSessionsSessionIdRoute =
   } as any)
 const CandidateSessionIdCompleteRoute =
   CandidateSessionIdCompleteRouteImport.update({
-    id: '/complete',
-    path: '/complete',
-    getParentRoute: () => CandidateSessionIdRoute,
+    id: '/candidate/$sessionId_/complete',
+    path: '/candidate/$sessionId/complete',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/candidate/$sessionId': typeof CandidateSessionIdRouteWithChildren
+  '/candidate/$sessionId': typeof CandidateSessionIdRoute
   '/candidate/': typeof CandidateIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/candidate/$sessionId/complete': typeof CandidateSessionIdCompleteRoute
@@ -66,7 +66,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/candidate/$sessionId': typeof CandidateSessionIdRouteWithChildren
+  '/candidate/$sessionId': typeof CandidateSessionIdRoute
   '/candidate': typeof CandidateIndexRoute
   '/dashboard': typeof DashboardIndexRoute
   '/candidate/$sessionId/complete': typeof CandidateSessionIdCompleteRoute
@@ -76,10 +76,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/candidate/$sessionId': typeof CandidateSessionIdRouteWithChildren
+  '/candidate/$sessionId': typeof CandidateSessionIdRoute
   '/candidate/': typeof CandidateIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
-  '/candidate/$sessionId/complete': typeof CandidateSessionIdCompleteRoute
+  '/candidate/$sessionId_/complete': typeof CandidateSessionIdCompleteRoute
   '/dashboard/sessions/$sessionId': typeof DashboardSessionsSessionIdRoute
   '/dashboard/problems/': typeof DashboardProblemsIndexRoute
 }
@@ -108,16 +108,17 @@ export interface FileRouteTypes {
     | '/candidate/$sessionId'
     | '/candidate/'
     | '/dashboard/'
-    | '/candidate/$sessionId/complete'
+    | '/candidate/$sessionId_/complete'
     | '/dashboard/sessions/$sessionId'
     | '/dashboard/problems/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  CandidateSessionIdRoute: typeof CandidateSessionIdRouteWithChildren
+  CandidateSessionIdRoute: typeof CandidateSessionIdRoute
   CandidateIndexRoute: typeof CandidateIndexRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
+  CandidateSessionIdCompleteRoute: typeof CandidateSessionIdCompleteRoute
   DashboardSessionsSessionIdRoute: typeof DashboardSessionsSessionIdRoute
   DashboardProblemsIndexRoute: typeof DashboardProblemsIndexRoute
 }
@@ -166,32 +167,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSessionsSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/candidate/$sessionId/complete': {
-      id: '/candidate/$sessionId/complete'
-      path: '/complete'
+    '/candidate/$sessionId_/complete': {
+      id: '/candidate/$sessionId_/complete'
+      path: '/candidate/$sessionId/complete'
       fullPath: '/candidate/$sessionId/complete'
       preLoaderRoute: typeof CandidateSessionIdCompleteRouteImport
-      parentRoute: typeof CandidateSessionIdRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface CandidateSessionIdRouteChildren {
-  CandidateSessionIdCompleteRoute: typeof CandidateSessionIdCompleteRoute
-}
-
-const CandidateSessionIdRouteChildren: CandidateSessionIdRouteChildren = {
-  CandidateSessionIdCompleteRoute: CandidateSessionIdCompleteRoute,
-}
-
-const CandidateSessionIdRouteWithChildren =
-  CandidateSessionIdRoute._addFileChildren(CandidateSessionIdRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  CandidateSessionIdRoute: CandidateSessionIdRouteWithChildren,
+  CandidateSessionIdRoute: CandidateSessionIdRoute,
   CandidateIndexRoute: CandidateIndexRoute,
   DashboardIndexRoute: DashboardIndexRoute,
+  CandidateSessionIdCompleteRoute: CandidateSessionIdCompleteRoute,
   DashboardSessionsSessionIdRoute: DashboardSessionsSessionIdRoute,
   DashboardProblemsIndexRoute: DashboardProblemsIndexRoute,
 }

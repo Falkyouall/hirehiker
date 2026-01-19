@@ -1,14 +1,14 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
-import { ProjectCodeViewer } from '@/components/project-code-viewer'
+import { WebContainerEditor, type WebContainerEditorRef } from '@/components/webcontainer-editor'
+import { AIMessageContent } from '@/components/ai-code-block'
 import { SwaggerViewer } from '@/components/swagger-viewer'
-import { Send, CheckCircle, Loader2, Bug, Code2, FileJson, FileText } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { Send, CheckCircle, Loader2, Bug, FileJson, FileText, Code2 } from 'lucide-react'
 import { getSession, startSession, completeSession } from '@/server/functions/sessions'
 import { getMessages, sendMessage } from '@/server/functions/messages'
 import type { ProjectFile, SwaggerSpec, BugTicket } from '@/db/schema'
@@ -72,6 +72,41 @@ function BugTicketCollapsible({ ticket }: { ticket: BugTicket }) {
   )
 }
 
+function ResizeHandle({ onDrag }: { onDrag: (deltaPercent: number) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(0)
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    startXRef.current = e.clientX
+    startWidthRef.current = containerRef.current?.parentElement?.clientWidth || window.innerWidth
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - startXRef.current
+      const deltaPercent = (deltaX / startWidthRef.current) * 100
+      startXRef.current = e.clientX
+      onDrag(deltaPercent)
+    }
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
+    document.addEventListener("mousemove", handleMouseMove)
+    document.addEventListener("mouseup", handleMouseUp)
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-1 bg-zinc-200 hover:bg-blue-500 cursor-col-resize flex-shrink-0 transition-colors"
+      onMouseDown={handleMouseDown}
+    />
+  )
+}
+
 function CandidateSessionPage() {
   const { session: initialSession, messages: initialMessages } = Route.useLoaderData()
   const navigate = useNavigate()
@@ -79,15 +114,23 @@ function CandidateSessionPage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [codeViewerOpen, setCodeViewerOpen] = useState(false)
+  const [editorReady, setEditorReady] = useState(false)
   const [swaggerOpen, setSwaggerOpen] = useState(false)
   const [instructionsOpen, setInstructionsOpen] = useState(true)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<WebContainerEditorRef>(null)
 
   // Get problem data
   const bugTickets = (session.problem?.bugTickets as BugTicket[]) || []
   const projectFiles = (session.problem?.projectFiles as ProjectFile[]) || []
   const swaggerSpec = session.problem?.swaggerSpec as SwaggerSpec | undefined
+  // Cast to access githubRepoUrl (added to schema but type inference may not be updated)
+  const problem = session.problem as typeof session.problem & { githubRepoUrl?: string | null }
+  const githubRepoUrl = problem?.githubRepoUrl || undefined
+
+  // Check if we should use WebContainer (has either projectFiles or githubRepoUrl)
+  const useWebContainer = projectFiles.length > 0 || !!githubRepoUrl
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -108,6 +151,16 @@ function CandidateSessionPage() {
     }
   }, [session.id, session.status])
 
+  // Callback for applying AI code changes to the editor
+  const handleApplyCode = useCallback((filepath: string, code: string) => {
+    editorRef.current?.applyCodeChange(filepath, code)
+  }, [])
+
+  // Handler for resizing panels with constraints (25-75%)
+  const handlePanelResize = useCallback((deltaPercent: number) => {
+    setLeftPanelWidth(prev => Math.max(25, Math.min(75, prev + deltaPercent)))
+  }, [])
+
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return
 
@@ -125,8 +178,26 @@ function CandidateSessionPage() {
     setMessages((prev) => [...prev, tempUserMessage])
 
     try {
+      // Get files and file tree from WebContainer if available
+      let projectFilesData: Record<string, string> | undefined
+      let fileTree: string[] | undefined
+
+      if (editorRef.current && editorReady) {
+        const [files, tree] = await Promise.all([
+          editorRef.current.getAllFiles(),
+          editorRef.current.getFileTree(),
+        ])
+        projectFilesData = files
+        fileTree = tree
+      }
+
       const result = await sendMessage({
-        data: { sessionId: session.id, content: userInput },
+        data: {
+          sessionId: session.id,
+          content: userInput,
+          projectFiles: projectFilesData,
+          fileTree: fileTree,
+        },
       })
 
       // Replace temp message with actual messages
@@ -220,82 +291,82 @@ function CandidateSessionPage() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left panel - Bug tickets & Code */}
-        <div className="w-1/2 border-r border-zinc-200 overflow-y-auto bg-white">
-          {hasBugTickets ? (
-            <div className="space-y-0">
-              {/* Collapsible Aufgabenstellung */}
-              <Collapsible open={instructionsOpen} onOpenChange={setInstructionsOpen}>
-                <CollapsibleTrigger>
-                  <FileText className="w-4 h-4" />
-                  Aufgabenstellung
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="p-4 prose prose-sm prose-zinc max-w-none">
-                    <ReactMarkdown>{session.problem?.description || ''}</ReactMarkdown>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Bug Tickets - each one expandable */}
-              {bugTickets.map((ticket) => (
-                <BugTicketCollapsible key={ticket.id} ticket={ticket} />
-              ))}
-
-              {/* Collapsible Projekt-Code */}
-              {projectFiles.length > 0 && (
-                <Collapsible open={codeViewerOpen} onOpenChange={setCodeViewerOpen}>
+        {/* Left panel - Code Editor or Bug tickets */}
+        <div style={{ width: `${leftPanelWidth}%` }} className="border-r border-zinc-200 flex flex-col bg-white flex-shrink-0">
+          {/* Top section - Bug tickets and context */}
+          <div className="flex-shrink-0 max-h-[40%] overflow-y-auto border-b border-zinc-200">
+            {hasBugTickets ? (
+              <div className="space-y-0">
+                {/* Collapsible Aufgabenstellung */}
+                <Collapsible open={instructionsOpen} onOpenChange={setInstructionsOpen}>
                   <CollapsibleTrigger>
-                    <Code2 className="w-4 h-4" />
-                    Projekt-Code ({projectFiles.length} Dateien)
+                    <FileText className="w-4 h-4" />
+                    Aufgabenstellung
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="h-[350px]">
-                      <ProjectCodeViewer files={projectFiles} />
+                    <div className="p-4 prose prose-sm prose-zinc max-w-none">
+                      <div dangerouslySetInnerHTML={{ __html: session.problem?.description || '' }} />
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
-              )}
 
-              {/* Collapsible API Dokumentation */}
-              {swaggerSpec && (
-                <Collapsible open={swaggerOpen} onOpenChange={setSwaggerOpen}>
-                  <CollapsibleTrigger>
-                    <FileJson className="w-4 h-4" />
-                    API Dokumentation ({swaggerSpec.endpoints.length} Endpoints)
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="max-h-[400px] overflow-auto">
-                      <SwaggerViewer spec={swaggerSpec} />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
+                {/* Bug Tickets */}
+                {bugTickets.map((ticket) => (
+                  <BugTicketCollapsible key={ticket.id} ticket={ticket} />
+                ))}
+
+                {/* Collapsible API Dokumentation */}
+                {swaggerSpec && (
+                  <Collapsible open={swaggerOpen} onOpenChange={setSwaggerOpen}>
+                    <CollapsibleTrigger>
+                      <FileJson className="w-4 h-4" />
+                      API Dokumentation ({swaggerSpec.endpoints.length} Endpoints)
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="max-h-[300px] overflow-auto">
+                        <SwaggerViewer spec={swaggerSpec} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+            ) : (
+              // Fallback to old layout for problems without bug tickets
+              <div className="p-6">
+                <h2 className="text-lg font-semibold mb-4">Problem Description</h2>
+                <div className="prose prose-zinc max-w-none">
+                  <div dangerouslySetInnerHTML={{ __html: session.problem?.description || '' }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom section - Code Editor */}
+          {useWebContainer ? (
+            <div className="flex-1 min-h-0">
+              <WebContainerEditor
+                ref={editorRef}
+                projectFiles={projectFiles}
+                githubRepoUrl={githubRepoUrl}
+                onReady={() => setEditorReady(true)}
+                className="h-full"
+              />
             </div>
           ) : (
-            // Fallback to old layout for problems without bug tickets
-            <div className="p-6 overflow-auto">
-              <h2 className="text-lg font-semibold mb-4">Problem Description</h2>
-              <div className="prose prose-zinc max-w-none">
-                <ReactMarkdown>{session.problem?.description || ''}</ReactMarkdown>
+            <div className="flex-1 flex items-center justify-center text-zinc-500">
+              <div className="text-center">
+                <Code2 className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
+                <p>No code editor available for this problem</p>
               </div>
-
-              {session.problem?.codebaseContext && (
-                <details className="mt-6 border-t pt-4">
-                  <summary className="text-lg font-semibold cursor-pointer hover:text-zinc-700">
-                    Codebase Context
-                  </summary>
-                  <div className="mt-4 prose prose-zinc max-w-none">
-                    <ReactMarkdown>{session.problem.codebaseContext}</ReactMarkdown>
-                  </div>
-                </details>
-              )}
             </div>
           )}
         </div>
 
+        {/* Resize Handle */}
+        <ResizeHandle onDrag={handlePanelResize} />
+
         {/* Right panel - Chat */}
-        <div className="w-1/2 flex flex-col bg-zinc-50">
+        <div style={{ width: `${100 - leftPanelWidth}%` }} className="flex flex-col bg-zinc-50 flex-shrink-0">
           {/* Messages */}
           <div className="flex-1 overflow-auto p-4 space-y-4">
             {messages.length === 0 && (
@@ -312,15 +383,22 @@ function CandidateSessionPage() {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                  className={`max-w-[85%] rounded-lg px-4 py-2 ${
                     message.role === 'user'
                       ? 'bg-zinc-900 text-white'
                       : 'bg-white border border-zinc-200'
                   }`}
                 >
-                  <div className="prose prose-sm max-w-none prose-invert:text-white">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                  </div>
+                  {message.role === 'assistant' ? (
+                    <AIMessageContent
+                      content={message.content}
+                      onApplyCode={editorReady ? handleApplyCode : undefined}
+                    />
+                  ) : (
+                    <div className="prose prose-sm max-w-none prose-invert">
+                      {message.content}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
