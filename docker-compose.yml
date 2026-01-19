@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:14.20-trixie
+    container_name: hirehiker-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hirehiker
+    ports:
+      - "5432:5432"
+    volumes:
+      - hirehiker_data:/var/lib/postgresql/data
+
+volumes:
+  hirehiker_data:
